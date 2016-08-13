@@ -303,19 +303,21 @@ function Even3(item){
             [{mousedown: function(e){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))}},
                 [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.set(false);}}],
                 [{wait: function(e, msg){
-                    return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.add(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
+                    return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
                 }},
-                    [{mousemove: function(e, msg){console.log('Drag'); return true;}}],
-                    [{mouseup: function(e, msg){console.log('Drop'); mmap.sel.mov(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))}}]
+                    [{mousemove: function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
+                    [{mouseup: function(){console.log('DblDrop')}}]
                 ],
                 [{mouseup: function(e){console.log('Click');}},
                     [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
-                    [{mousedown: function(e,msg){console.log('DblDown');mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop))}},
-                        [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8)}},
-                            [{mousemove: function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
-                            [{mouseup: function(){console.log('DblDrop')}}]
-                        ],
-                        [{mouseup: function(e, m){console.log('DblClick');mmap.sel.opt(mmap.pick(m.x -cnv.offsetLeft, m.y -cnv.offsetTop));}}]
+                    [{mousedown: function(e,msg){console.log('DblDown');mmap.sel.add(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))}},
+                        [{mouseup: function(e, m){console.log('DblClick');mmap.sel.opt(mmap.pick(m.x -cnv.offsetLeft, m.y -cnv.offsetTop));}}],
+                        [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
+                            [{mousemove: function(e, msg){console.log('Drag'); return true;}}],
+                            [{mouseup: function(e, msg){
+                                console.log('Drop'); mmap.sel.mov(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))
+                            }}]
+                        ]
                     ]
                 ]
             ]
