@@ -97,7 +97,12 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     x0 = x0 || ids.canvas.width / 2; y0 = y0 || ids.canvas.height /2
     ctx.translate(x0, y0);
     
-    ids.node.onkeydown = function(e){if((e || window.event).keyCode^13)return; targets[0][0].cap = this.value; ids.box.style.display = 'none';}
+    ids.node.onkeydown = function(e){
+        if((e || window.event).keyCode^13)return;
+        targets[0][0].cap = this.value;
+        ids.box.style.display = 'none';
+        ctx.sel.set();
+    }
     ids.child.onkeydown = function(e){
         if((e||window.event).keyCode^13)return;
         if(!this.value)return ctx.sel.set()||ctx.sel.opt();
@@ -183,7 +188,13 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     var targets = [];
     ctx.sel = {
         opt : function(node){
-            if(!node)return ids.box.style.display = 'none';
+            if(!node){
+                if(ids.box.style.display !== 'none'){
+                    ids.box.style.display = 'none';
+                    ctx.sel.set();
+                }
+                return
+            }
             ctx.sel.set(node);
             ids.child.select();
             ids.box.style.display = 'block';
