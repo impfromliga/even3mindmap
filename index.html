@@ -1,0 +1,351 @@
+<meta charset="utf-8">
+<body>
+    <style>
+        #wrapper{text-align: center; position: absolute; width:100%}
+        #statusbar{
+            position:relative; z-index: 2; top:0px; height:20px;
+            color:rgba(255,255,255,.33);
+            -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none;
+        }
+        .prop{width:50%;float:left;background: #444; margin-top: 1px;}
+        .val{width:50%;float:left;background: #444;border: 1px solid #666; margin-top: 1px;}
+        #box{
+            display:none;
+            position:relative; z-index: 10; top:0px; width:30%; height:50px; margin: auto; padding: 8px;
+            background: #444; border: 1px solid #666; box-shadow: 0px 0px 8px}
+        #cnv{position:relative; top:0px; background: #444; text-rendering: optimizeSpeed; image-rendering: optimizeSpeed}
+        body{background: #303030; text-align: center; margin: 0px;overflow: hidden}
+    </style>
+    <div id=wrapper>
+        <div id=statusbar><small>наведите мышь на пункт, что бы просмотреть его описание</small></div>
+        <div id=box>
+            <span class=prop>Добавить дочернее имя:</span> <input class=val id=child type=text></input>
+            <span class=prop>Имя текущего элемента:</span> <input class=val id=node type=text></input>
+        </div>
+    </div>
+    <canvas id=cnv></canvas>
+    <script>var json =
+[{"cap": "самоуправление", "alt": "для мозговых штурмов онлайн предлагается использовать данную карту разума, функционал требует обсуждения"},
+    [{"cap": "add1"}],
+    [{"cap": "add2"}],
+    [{"cap": "add3"}],
+    [{"cap": "возможности"},
+        [{"cap": "анимация"},
+            [{"cap": "входы/выходы", "alt": "переходы по уровням анимируются плавным сжатием/растяжением сектора"}],
+            [{"cap": "в горизонталь", "alt": "выбор пункта крутит карту так, чтобы последний располагался горизонтально"}],
+        ],
+        [{"cap": "навигация"},
+            [{"cap": "скроллинг карты?", "alt": "происходит посредствам свайпов (нужен? или заменить входом в пункты)"}],
+            [{"cap": "вход в пункты", "alt": "двойное нажатие на пункт"}],
+            [{"cap": "вверх по корню", "alt": "двойное нажатие на корневой элемент производит выход на уровень вверх"}]
+        ],
+        [{"cap": "изменение"},
+            [{"cap": "добавление", "alt": "реализовано через изменение родителя (требует добавления интерактивного корневого элемента)"}],
+            [{"cap": "правка", "alt": "долгое нажатие на пункте"}],
+            [{"cap": "удаление", "alt": "реализуется через изменение пункта"}]
+        ],
+        [{"cap": "сортировка"},
+            [{"cap": "выбор", "alt": "краткое однократное нажатие на пункт (возможен множественный выбор)"}],
+            [{"cap": "перемещение", "alt": ""}]
+        ]
+    ],
+    [{"cap": "mouseDn"},
+        [{"cap": "mouseUp"},
+            [{"cap": "mouseDn"},
+                [{"cap": "mouseUp", "alt": "вход в пункт - двойной клик без задержек"}],
+                [{"cap": "mouseMov", "alt": "перемещение карты - двойной клик с удержанием второго клика + перемещение (как перемещение на тайчпаде)"}]
+            ],
+            [{"cap": "wait", "alt": "выбор пункта - одиночный короткий клик (с контрольной ожидающей паузой, чтобы отличить от возможного двойного)"}]
+        ],
+        [{"cap": "mouseMov", "alt": "перемещение выбранного - простое перетаскивание (смещение сразу без задержек после нажатия)"}],
+        [{"cap": "wait", "alt": "редактирование пункта - долгое нажатие"}]
+    ],
+    [{"cap": "API"},
+        [{"cap": "Mmap(canvas, json)", default:{fillStyle:'#020'}}],
+        [{"cap": ".draw(node)", "alt": "нарисует объект node (с обновлением потомков если необходимо)", default:{fillStyle:'#020'}}],
+        [{"cap": ".pick(x,y)", "alt": "вернет объект в точке (x,y)", default:{fillStyle:'#020'}}],
+        [{"cap": ".sel()", "alt": "вернет массив выбранных объектов", default:{fillStyle:'#020'}}],
+        [{"cap": ".sel([nodes])", "alt": "заменит выбор переданными объектами", default:{fillStyle:'#020'}}],
+        [{"cap": ".sel.keep([nodes])", "alt": "добавит выбор на переданные объекты", default:{fillStyle:'#666'}}],
+        [{"cap": ".sel.free([nodes])", "alt": "снимет выбор с переданных объектов", default:{fillStyle:'#666'}}],
+        [{"cap": ".sel.inv([nodes])", "alt": "инвертирует выбор на переданных объектах", default:{fillStyle:'#966'}}],
+        [{"cap": ".del([nodes])", "alt": "удаление выделенных элементов"}],
+        [{"cap": ".add([nodes])", "alt": "добавление нового элемента в выбранный"}],
+        [{"cap": ".style({...})", "alt": "стили рисовки элементов канвы", default:{fillStyle:'#202000'}},
+            [{"cap": "default:{fillstyle: '#999'}", "alt": "стили поумолчанию", default:{fillStyle:'#020'}}],
+            [{"cap": "select: {fillstyle: '#fff'}", "alt": "стиль выбраного элемента", default:{fillStyle:'#020'}}]
+        ]
+    ]
+]</script>
+    <script>"use strict";
+var MindMap = function (map, ids, px, angle, x0, y0){
+    (function setParent(node, parent){
+        node[0].parent = parent;
+        console.log(node[0].cap, 'child of', parent&&parent[0].cap || 'none');
+        for(var n = node.length; --n;) setParent(node[n], node);
+    })(map);
+    
+    var ctx = ids.canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=ctx.webkitImageSmoothingEnabled=ctx.mozImageSmoothingEnabled=ctx.oImageSmoothingEnabled=false;
+    px = px || 20;
+    angle = angle || Math.PI*2;
+    x0 = x0 || ids.canvas.width / 2; y0 = y0 || ids.canvas.height /2
+    ctx.translate(x0, y0);
+    
+    ids.node.onkeydown = function(e){if((e || window.event).keyCode^13)return; targets[0][0].cap = this.value; ids.box.style.display = 'none';}
+    ids.child.onkeydown = function(e){
+        if((e||window.event).keyCode^13)return;
+        if(!this.value)return ctx.sel.set()||ctx.sel.opt();
+        targets[0].push([{cap:this.value,parent:targets[0]}]);
+        this.value='';
+    }
+    
+    ctx.scroll = function(dx, dy){
+        x0 += dx; y0 += dy; //var matrix = ctx.currentTransform //matrix.e matrix.f;
+        //http://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/currentTransform
+        ctx.translate(dx, dy);
+    }
+    ctx.pick = function(x, y, a, r, node, rotate, sector, radiusA){
+        r = r || Math.hypot(y - y0, x - x0);
+        radiusA = radiusA || 20; //TODO: const root offset
+        node = node || map;
+        if(r < 20) return map; //TODO: global mmap root path
+        a = a || Math.atan2(y - y0, x - x0);
+        rotate = rotate || (typeof node[0].a === 'number' ? node[0].a : Math.PI); //TODO: global mmap rotate;
+        sector = sector || angle;
+        var n = node.length - 1,
+            step = sector / n,
+            find = ((((a - rotate) % (Math.PI*2)) + Math.PI*2) % (Math.PI*2)) / step | 0;
+        ctx.save();
+        for(var m in node[0].default) ctx[m] = node[0].default[m]; //local styles
+        var w = ctx.measureText(node[0].cap).width + margin*2,
+            radA = Math.max(radiusA, parseInt(ctx.font.split(' ')[0].replace('px', '')) / Math.sin(Math.min(sector, Math.PI/3))) + w;
+        if(node === map) radA = 20; //TODO: global root offset
+
+        ctx.restore();
+        if (radA > r) return node;
+        if (node.length > 1) return ctx.pick(x, y, a, r, node[find+1], rotate + step * find, step, radA);
+        return false;
+    }
+    
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = "center";
+    ctx.lineWidth = .5;
+    var style = {default:{fillStyle: 'rgba(0,0,0,0)'}, select: {strokeStyle: '#6af', fillStyle: '#2f3437'}}
+    var margin = px / 8;
+    ctx.draw = function(node, a, da, r, lim){
+        node = node || map;
+        da = (da || node[0].da) || (Math.PI*2);
+        r = r || node[0].r || 0;
+        lim = lim || 9;
+        if(typeof a === 'undefined') a = typeof node[0].a === 'number' ? node[0].a : Math.PI;
+        var name = node[0].cap || 'noname',
+            sector = da / (node.length - 1),
+            radA;
+        ctx.save();
+        for(var m in node[0].default) ctx[m] = node[0].default[m]; //local styles
+        var w = ctx.measureText(name).width + margin*2;
+        radA = Math.max(r, parseInt(ctx.font.split(' ')[0].replace('px', '')) / Math.sin(Math.min(da, Math.PI/3))) + w;
+        
+        ctx.save();
+        if(node[0].mark) for(var m in style.select) ctx[m] = style.select[m]; //if selected node set style
+        else for(var m in style.default) ctx[m] = style.default[m];
+        if(da === Math.PI*2) radA = 20; //СВЕРТКА пути! //TODO: опциональность
+        ctx.beginPath();
+        if(r)ctx.arc(0, 0, r , a, a+da);
+        ctx.arc(0, 0, radA - margin, a+da, a, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        if(da !== Math.PI*2){ //СВЕРТКА пути! //TODO: опциональность
+            ctx.rotate(a+da/2); //TODO: one transform // +da/2 cos vertical centred
+            ctx.translate(radA - w/2 - margin, 0);
+            if(Math.cos(a+da/2) < 0) ctx.scale(-1,-1);
+            ctx.fillText(name, 0, 0);
+        }
+        ctx.restore();
+        
+        if(lim <= 0)return;
+        for(var k = 1; k < node.length; k++)
+            ctx.draw(node[k], a+sector * (k-1), sector, radA, lim - 1);
+    }
+    
+    var targets = [];
+    ctx.sel = {
+        opt : function(node){
+            if(!node)return ids.box.style.display = 'none';
+            ctx.sel.set(node);
+            ids.child.select();
+            ids.box.style.display = 'block';
+            ids.node.value = node[0].cap || 'none';
+            ids.child.focus();
+        },
+        mov : function(node){
+            if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
+            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
+            for(var t; t = targets[targets.length-1];){
+                ctx.sel.del(t);
+                node && node.push(t);
+                t[0].parent = node;
+            }
+        },
+        del : function(node){ //удаляет пункт
+            if(node === map)return; //нельзя удалить корневой пункт
+            var parent = node[0].parent,
+                idx = parent.indexOf(node);
+            console.log('DELETE', node[0].cap + ' ' + idx, 'child of', parent && parent[0].cap || 'none');
+            ctx.sel.pop(node);
+            parent.splice(idx, 1);
+            console.log(map);
+        },
+        get : function(){return targets},
+        set : function(node){ //ограничивает выбор только переданным пунктом или полностью снимает выбор если node не передан
+            //console.log('before',targets); //DEBUG:
+            for(var n = targets.length; n--;) ctx.sel.pop(targets[n]);
+            if(node) ctx.sel.add(node);
+            //console.log('after',targets); //DEBUG:
+        },
+        xor : function(node){
+            //console.log('before',targets); //DEBUG:
+            if(!node)return;
+            if(node[0].mark) ctx.sel.pop(node); else ctx.sel.add(node);
+            //console.log('after',targets); //DEBUG:
+        },
+        pop : function(node){ //убирает пункт из выбранных (если он выбран) //TODO: nodes[] support
+            if(!node)return;
+            if(!node[0].mark)return; //if already free return
+            node[0].mark = 0; //TODO: multiuser(color) select can be add here if check bits
+            var idx = targets.indexOf(node);
+            if(!~idx)console.log('error drop target', idx, node, 'from', targets);//DEBUG: check targets work
+            targets.splice(idx, 1);
+        },
+        add : function(node){ //добавляет пункт к выбранным
+            if(!node)return;
+            if(node[0].mark) return; //if already keep return
+            node[0].mark = 1;
+            targets.push(node);
+            //ctx.draw(node); //TODO: out from API ?
+        }
+    }
+    return ctx;
+}</script>
+    <script>"use strict";
+//TODO: reject by Object.defineProperty() events external reset
+//TODO: циклические ссылки в цепях
+//TODO: multi-item Even3 optimization
+function Even3(item){
+    item.onmousemove = item.onmouseup = item.onmousedown = item.onwait = function(e){
+        e = e || window.event || {}; msg.even3 = msg.even3 || e;
+        e.preventDefault && e.preventDefault(); //для отмены действий поумолчанию
+        msg.now = e.timeStamp || (window.performance && window.performance.now()); msg.time = msg.time || msg.now; //дублируем метку времени
+        msg.dT = (msg.now - msg.even3.timeStamp) || 0;
+        msg.dX = (e.pageX - msg.even3.pageX) || 0; msg.dx = (e.pageX - msg.x) || 0;
+        msg.dY = (e.pageY - msg.even3.pageY) || 0; msg.dy = (e.pageY - msg.y) || 0;
+        while(true){
+            msg.dt = (msg.now - msg.time) || 0;
+            for(var buf = [], key, obj, n = 1; obj = state[n] && state[n][0]; n++)
+                if('wait' == (key = Object.keys(obj)[0])){
+                    var newmsg = obj[key](e, msg);
+                    if(newmsg === true) continue;
+                    if(newmsg === false || newmsg === undefined) {state = item.even3; break;} //событие обрывает цепочку
+                    if(newmsg >= 0) continue;
+                    buf.push({delay: newmsg - Math.random(), state: state[n]});
+                }
+            if(!buf.length) break;
+            var erlyest = buf.reduce(function(a, b){return (a.delay < b.delay) ? a : b});
+            state = erlyest.state;
+            msg.time += erlyest.delay; //|| msg.now; 
+            if(state.length <= 1) state = item.even3; //тупиковая цепочка, возвращаем состояние на корень Even3
+        }
+        if(state.length <= 1) state = item.even3; //тупиковая цепочка, возвращаем состояние на корень Even3
+        
+        for(var key, obj, n = 1; obj = state[n] && state[n][0]; n++)
+            if(e.type == (key = Object.keys(obj)[0])){
+                var newmsg = obj[key](e, msg);
+                msg.time = msg.now; //дублируем метку времени события
+                msg.x = e.pageX; msg.y = e.pageY;
+                if(newmsg === true) continue; //событие ожидает других условий
+                if(newmsg === false) return state = item.even3; //событие обрывает цепочку
+                msg.even3 = e; //сохраняем информацию о выполненном событии
+                //TODO: событие может вернуть объект newmsg... сделаем управляемый переход для граффовой структуры цепочек?
+                return state = state[n];
+            }
+    }
+    var msg = {}, state = item.even3 = [{root:function(){throw Error("impossible mistake: Can't run root node")}}];
+    return function(){ for(var n = 0; n < arguments.length; n++) item.even3.push(arguments[n]); };
+}</script>
+    <script>
+        "use strict";
+        //var size = Math.min(innerWidth, innerHeight)
+        //cnv.width = size; cnv.height = size;
+        cnv.width = innerWidth; cnv.height = innerHeight;
+        var mmap = MindMap(json, {canvas:cnv,box:document.getElementById('box'),node:document.getElementById('node'),child:document.getElementById('child')});
+        mmap.fillStyle = '#000'; mmap.strokeStyle = '#666';
+        var debugtime = (new Date()).getTime();
+        mmap.font = '16px sans-serif';
+        document.title = 'карта построена за '+ ((new Date()).getTime() - debugtime)+'ms';
+        go();
+        function go(){
+            mmap.clearRect(-cnv.width,-cnv.height,cnv.width*2,cnv.height*2);
+            mmap.draw();
+            window.requestAnimationFrame(go);
+            //setTimeout(go,500);
+            //json[0].a+=.003;
+        }
+        
+        Even3(document.getElementById('cnv'))(
+            [{mousemove: function(e){
+                console.log('Hover');
+                var item = mmap.pick(e.pageX - cnv.offsetLeft, e.pageY - cnv.offsetTop)
+                document.getElementById('statusbar').innerHTML = item ?
+                    '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
+                    '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
+            }}],
+            [{mousedown: function(e){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))}},
+                [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.set(false);}}],
+                [{wait: function(e, msg){
+                    return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.add(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
+                }},
+                    [{mousemove: function(e, msg){console.log('Drag'); return true;}}],
+                    [{mouseup: function(e, msg){console.log('Drop'); mmap.sel.mov(mmap.pick(e.pageX -cnv.offsetLeft, e.pageY -cnv.offsetTop))}}]
+                ],
+                [{mouseup: function(e){console.log('Click');}},
+                    [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
+                    [{mousedown: function(e,msg){console.log('DblDown');mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop))}},
+                        [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8)}},
+                            [{mousemove: function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
+                            [{mouseup: function(){console.log('DblDrop')}}]
+                        ],
+                        [{mouseup: function(e, m){console.log('DblClick');mmap.sel.opt(mmap.pick(m.x -cnv.offsetLeft, m.y -cnv.offsetTop));}}]
+                    ]
+                ]
+            ]
+        )
+        /*
+        var KEY = {
+            DEL: 46,
+        }
+        onkeydown = function(e){
+            e = e || window.event;
+            console.log(e.keyCode)
+            switch(e.keyCode){
+                case KEY.DEL:
+                    mmap.sel.del(mmap.sel.get()[0]);
+            }
+        }*/
+        setInterval(document.getElementById('cnv').onwait, 50);
+/*[{sel:1,"cap": "mouseDn"},
+    [{"cap": "mouseUp"},
+        [{"cap": "mouseDn"},
+            [{"cap": "mouseUp", "alt": "вход в пункт - двойной клик без задержек"}],
+            [{"cap": "mouseMov", "alt": "перемещение карты - двойной клик с удержанием второго клика + перемещение (как перемещение на тайчпаде)"}]
+        ],
+        [{"cap": "wait", "alt": "выбор пункта - одиночный короткий клик (с контрольной ожидающей паузой, чтобы отличить от возможного двойного)"}]
+    ],
+    [{"cap": "mouseMov", "alt": "перемещение выбранного - простое перетаскивание (смещение сразу без задержек после нажатия)"}],
+    [{"cap": "wait", "alt": "редактирование пункта - долгое нажатие"}]
+]        */
+    </script>
+</body>
