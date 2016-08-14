@@ -84,6 +84,7 @@
 ]</script>
     <script>"use strict";
 var MindMap = function (map, ids, px, angle, x0, y0){
+    //TODO: опцилональное автоскрытие одиночной цепи
     (function setParent(node, parent){
         node[0].parent = parent;
         console.log(node[0].cap, 'child of', parent&&parent[0].cap || 'none');
