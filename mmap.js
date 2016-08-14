@@ -1,5 +1,6 @@
 "use strict";
 var MindMap = function (map, ids, px, angle, x0, y0){
+    //TODO: опцилональное автоскрытие одиночной цепи
     (function setParent(node, parent){
         node[0].parent = parent;
         console.log(node[0].cap, 'child of', parent&&parent[0].cap || 'none');
@@ -13,7 +14,12 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     x0 = x0 || ids.canvas.width / 2; y0 = y0 || ids.canvas.height /2
     ctx.translate(x0, y0);
     
-    ids.node.onkeydown = function(e){if((e || window.event).keyCode^13)return; targets[0][0].cap = this.value; ids.box.style.display = 'none';}
+    ids.node.onkeydown = function(e){
+        if((e || window.event).keyCode^13)return;
+        targets[0][0].cap = this.value;
+        ids.box.style.display = 'none';
+        ctx.sel.set();
+    }
     ids.child.onkeydown = function(e){
         if((e||window.event).keyCode^13)return;
         if(!this.value)return ctx.sel.set()||ctx.sel.opt();
@@ -54,6 +60,9 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     ctx.lineWidth = .5;
     var style = {default:{fillStyle: 'rgba(0,0,0,0)'}, select: {strokeStyle: '#6af', fillStyle: '#2f3437'}}
     var margin = px / 8;
+    ctx.clear = function(){
+        ctx.clearRect(-x0, -y0, cnv.width, cnv.height);
+    }
     ctx.draw = function(node, a, da, r, lim){
         node = node || map;
         da = (da || node[0].da) || (Math.PI*2);
@@ -96,7 +105,13 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     var targets = [];
     ctx.sel = {
         opt : function(node){
-            if(!node)return ids.box.style.display = 'none';
+            if(!node){
+                if(ids.box.style.display !== 'none'){
+                    ids.box.style.display = 'none';
+                    ctx.sel.set();
+                }
+                return
+            }
             ctx.sel.set(node);
             ids.child.select();
             ids.box.style.display = 'block';
