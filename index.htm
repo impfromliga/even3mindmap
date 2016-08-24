@@ -19,7 +19,7 @@
 		.line{height:25px;}
         #box{
             display:none;
-            position:relative; z-index: 10; top:0px; width:330px; height:50px; margin: auto; padding: 5px;
+            position:relative; z-index: 10; top:0px; width:330px; height:80px; margin: auto; padding: 5px;
             background: #444; border: 1px solid #666; box-shadow: 0px 0px 8px}
         #cnv{position:relative; top:0px; background: #444; text-rendering: optimizeSpeed; image-rendering: optimizeSpeed}
         body{background: #303030; text-align: center; margin: 0px;overflow: hidden}
@@ -29,61 +29,72 @@
         <div id=box>
 			<div class=line><span class=prop>Дочернее имя:</span> <input class=val id=child type=text></input></div>
             <div class=line><span class=prop>Имя элемента:</span> <input class=val id=node type=text></input></div>
+            <div class=line><button id=savemap class=prop>Сохранить все</button></div>
         </div>
     </div>
     <canvas id=cnv></canvas>
     <script src='mmap.json'></script>
+    <script src='iddb.js'></script>
     <script src='mmap.js'></script>
     <script src='even3.js'></script>
     <script>
         "use strict";
         //var size = Math.min(innerWidth, innerHeight); cnv.width = size; cnv.height = size;
-        cnv.width = innerWidth; cnv.height = innerHeight;
-        var mmap = MindMap(json, {canvas:cnv,box:document.getElementById('box'),node:document.getElementById('node'),child:document.getElementById('child')});
-        mmap.fillStyle = '#000'; mmap.strokeStyle = '#666';
-        var debugtime = (new Date()).getTime();
-        mmap.font = '24px sans-serif';
-        document.title = 'карта построена за '+ ((new Date()).getTime() - debugtime)+'ms';
-        go();
-        function go(){
-            mmap.clear();
-            mmap.draw();
-            window.requestAnimationFrame(go);
-            //setTimeout(go,500);
-            //json[0].a+=.003;
-        }
-        
-        Even3(document.getElementById('cnv'))(
-            [{mousemove: function(e,msg){
-                console.log('Hover');
-                var item = mmap.pick(msg.X - cnv.offsetLeft, msg.Y - cnv.offsetTop)
-                document.getElementById('statusbar').innerHTML = item ?
-                    '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
-                    '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
-            }}],
-            [{'mousedown|touchstart': function(e,msg){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.set(false);}}],
-                [{wait: function(e, msg){
-                    return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
-                }},
-                    [{'mousemove|touchmove': function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
-                    [{'mouseup|touchend': function(){console.log('DblDrop')}}]
-                ],
-                [{'mouseup|touchend': function(e){console.log('Click');}},
-                    [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
-                    [{'mousedown|touchstart': function(e,msg){console.log('DblDown');mmap.sel.add(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                        [{'mouseup|touchend': function(e, msg){console.log('DblClick');mmap.sel.opt(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop));}}],
-                        [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
-                            [{'mousemove|touchmove': function(e, msg){console.log('Drag'); return true;}}],
-                            [{'mouseup|touchend': function(e, msg){
-                                console.log('Drop'); mmap.sel.mov(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))
-                            }}]
+        function onJsonLoaded(json){
+            cnv.width = innerWidth; cnv.height = innerHeight;
+            var mmap = MindMap(json, {
+                canvas:cnv,box:document.getElementById('box'),node:document.getElementById('node'),child:document.getElementById('child')
+            });
+            mmap.font = '900 18px sans-serif';
+            mmap.fillStyle = '#000'; mmap.strokeStyle = '#666';
+            var debugtime = (new Date()).getTime();
+            document.title = 'карта построена за '+ ((new Date()).getTime() - debugtime)+'ms';
+            go();
+            function go(){
+                mmap.clear();
+                mmap.draw();
+                window.requestAnimationFrame(go);
+                //setTimeout(go,500);
+                //json[0].a+=.003;
+            }
+
+            document.getElementById('savemap').onclick = function(e){
+                e = e || window.event;
+
+            }
+
+            Even3(document.getElementById('cnv'))(
+                [{mousemove: function(e,msg){
+                    console.log('Hover');
+                    var item = mmap.pick(msg.X - cnv.offsetLeft, msg.Y - cnv.offsetTop)
+                    document.getElementById('statusbar').innerHTML = item ?
+                        '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
+                        '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
+                }}],
+                [{'mousedown|touchstart': function(e,msg){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
+                    [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.one(false);}}],
+                    [{wait: function(e, msg){
+                        return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
+                    }},
+                        [{'mousemove|touchmove': function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
+                        [{'mouseup|touchend': function(){console.log('DblDrop')}}]
+                    ],
+                    [{'mouseup|touchend': function(e){console.log('Click');}},
+                        [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
+                        [{'mousedown|touchstart': function(e,msg){console.log('DblDown');mmap.sel.set(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
+                            [{'mouseup|touchend': function(e, msg){console.log('DblClick');mmap.sel.opt(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop));}}],
+                            [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
+                                [{'mousemove|touchmove': function(e, msg){console.log('Drag'); return true;}}],
+                                [{'mouseup|touchend': function(e, msg){
+                                    console.log('Drop'); mmap.sel.mov(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))
+                                }}]
+                            ]
                         ]
                     ]
                 ]
-            ]
-        )
-        setInterval(document.getElementById('cnv').onwait, 50);
+            )
+            setInterval(document.getElementById('cnv').onwait, 50);
+        }
     </script>
 </body>
 </html>

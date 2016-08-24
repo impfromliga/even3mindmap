@@ -1,10 +1,13 @@
-"use strict";
-var MindMap = function (map, ids, px, angle, x0, y0){
+'use strict';
+var MindMap = function (map, ids, px, angle, x0, y0) {
     //TODO: опцилональное автоскрытие одиночной цепи
-    (function setParent(node, parent){
-        node[0].parent = parent;
-        console.log(node[0].cap, 'child of', parent&&parent[0].cap || 'none');
-        for(var n = node.length; --n;) setParent(node[n], node);
+    var lastId = 0;
+    console.log('map', map);
+    (function setParent(node, parent) {
+        node[0].parent = parent || false;
+        //if(!node[0].id) node[0].id = lastId++; //autoIncrementID
+        console.log(node[0].cap, 'child of', parent && parent[0].cap || 'none');
+        for (var n = node.length; --n;) setParent(node[n], node);
     })(map);
     
     var ctx = ids.canvas.getContext('2d');
@@ -13,17 +16,18 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     angle = angle || Math.PI*2;
     x0 = x0 || ids.canvas.width / 2; y0 = y0 || ids.canvas.height /2
     ctx.translate(x0, y0);
-    
-    ids.node.onkeydown = function(e){
+    ids.node.onkeydown = function(e){ //изменение названия пункта
         if((e || window.event).keyCode^13)return;
         targets[0][0].cap = this.value;
         ids.box.style.display = 'none';
-        ctx.sel.set();
+        ctx.sel.one();
     }
-    ids.child.onkeydown = function(e){
+    ids.child.onkeydown = function(e){ //добавление потомка
         if((e||window.event).keyCode^13)return;
-        if(!this.value)return ctx.sel.set()||ctx.sel.opt();
-        targets[0].push([{cap:this.value,parent:targets[0]}]);
+        if(!this.value)return ctx.sel.one()||ctx.sel.opt(); //при пустом вводе отмена ввода
+        var node = [{cap:this.value, parent:targets[0]}] //создание пункта
+        iddb.add(node);
+        targets[0].push( node );
         this.value='';
     }
     
@@ -102,33 +106,36 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             ctx.draw(node[k], a+sector * (k-1), sector, radA, lim - 1);
     }
     
-    var targets = [];
+    var targets = [],
+        way = map;
     ctx.sel = {
+        /** открыть карту с уровня пункта */
+        way : function(node){},
+        /** открыть окно опций для переданного пункта */
         opt : function(node){
             if(!node){
                 if(ids.box.style.display !== 'none'){
                     ids.box.style.display = 'none';
-                    ctx.sel.set();
+                    ctx.sel.one();
                 }
                 return
             }
-            ctx.sel.set(node);
+            ctx.sel.one(node);
             ids.child.select();
             ids.box.style.display = 'block';
             ids.node.value = node[0].cap || 'none';
             ids.child.focus();
         },
-        mov : function(node){
-            if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
-            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
-            for(var t; t = targets[targets.length-1];){
-                ctx.sel.del(t);
-                node && node.push(t);
-                t[0].parent = node;
-            }
+        
+        /** добавить пункт в карту */
+        add : function(node){
+            
         },
-        del : function(node){ //удаляет пункт
+        /** удалить пункт из карты */
+        del : function(node, notSync){ //удаляет пункт
             if(node === map)return; //нельзя удалить корневой пункт
+            if(!notSync) //толко если у пункта есть родитель, он наверняка не корневой, и его можно удалить из базы!
+                iddb.del(node) //удалить из базы
             var parent = node[0].parent,
                 idx = parent.indexOf(node);
             console.log('DELETE', node[0].cap + ' ' + idx, 'child of', parent && parent[0].cap || 'none');
@@ -136,19 +143,40 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             parent.splice(idx, 1);
             console.log(map);
         },
+        /** переместить выбранное в сообщенный пункт */
+        mov : function(node){
+            //TODO: remove iddb
+            if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
+            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
+            for(var t; t = targets[targets.length-1];){
+                ctx.sel.del(t, node);
+                if (node) {
+                    node.push(t);
+                    iddb.mov(t, node);
+                    t[0].parent = node; //защита пункта от удаления из базы (пункт без родителя считается корневым и не может быть удален)
+                }
+            }
+        },
+        
+        /** получить список выбранных на данный момент пунктов */
         get : function(){return targets},
-        set : function(node){ //ограничивает выбор только переданным пунктом или полностью снимает выбор если node не передан
+        /** выбор только переданного пункта или снятие всего выбора, не передан */
+        one : function(node){
             //console.log('before',targets); //DEBUG:
             for(var n = targets.length; n--;) ctx.sel.pop(targets[n]);
-            if(node) ctx.sel.add(node);
+            if(node) ctx.sel.set(node);
             //console.log('after',targets); //DEBUG:
         },
-        xor : function(node){
-            //console.log('before',targets); //DEBUG:
+        
+        /** добавить переданный пункт к выбранным */
+        set : function(node){ //добавляет пункт к выбранным
             if(!node)return;
-            if(node[0].mark) ctx.sel.pop(node); else ctx.sel.add(node);
-            //console.log('after',targets); //DEBUG:
+            if(node[0].mark) return; //if already keep return
+            node[0].mark = 1;
+            targets.push(node);
+            //ctx.draw(node); //TODO: out from API ?
         },
+        /** убрать переданный пункт из выбора */
         pop : function(node){ //убирает пункт из выбранных (если он выбран) //TODO: nodes[] support
             if(!node)return;
             if(!node[0].mark)return; //if already free return
@@ -157,12 +185,12 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             if(!~idx)console.log('error drop target', idx, node, 'from', targets);//DEBUG: check targets work
             targets.splice(idx, 1);
         },
-        add : function(node){ //добавляет пункт к выбранным
+        /** инвертировать выбор на переданном пункте */
+        xor : function(node){
+            //console.log('before',targets); //DEBUG:
             if(!node)return;
-            if(node[0].mark) return; //if already keep return
-            node[0].mark = 1;
-            targets.push(node);
-            //ctx.draw(node); //TODO: out from API ?
+            if(node[0].mark) ctx.sel.pop(node); else ctx.sel.set(node);
+            //console.log('after',targets); //DEBUG:
         }
     }
     return ctx;

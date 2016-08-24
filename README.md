@@ -1,2 +1,2 @@
-# Even3 (Event Tree) Mind Map
+# MindMapEven3
 Mind Map full stack JS based on Even Tree (self technique)

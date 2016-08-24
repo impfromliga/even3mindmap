@@ -19,7 +19,7 @@
 		.line{height:25px;}
         #box{
             display:none;
-            position:relative; z-index: 10; top:0px; width:330px; height:50px; margin: auto; padding: 5px;
+            position:relative; z-index: 10; top:0px; width:330px; height:80px; margin: auto; padding: 5px;
             background: #444; border: 1px solid #666; box-shadow: 0px 0px 8px}
         #cnv{position:relative; top:0px; background: #444; text-rendering: optimizeSpeed; image-rendering: optimizeSpeed}
         body{background: #303030; text-align: center; margin: 0px;overflow: hidden}
@@ -29,6 +29,7 @@
         <div id=box>
 			<div class=line><span class=prop>Дочернее имя:</span> <input class=val id=child type=text></input></div>
             <div class=line><span class=prop>Имя элемента:</span> <input class=val id=node type=text></input></div>
+            <div class=line><button id=savemap class=prop>Сохранить все</button></div>
         </div>
     </div>
     <canvas id=cnv></canvas>
@@ -82,13 +83,138 @@
         ]
     ]
 ]</script>
-    <script>"use strict";
-var MindMap = function (map, ids, px, angle, x0, y0){
+    <script>var iddb = (function(dbName, ver){
+    ver = ver || 7
+    var OPT = 0, DEF = 1, storstr = ["opt", "def"];
+    var indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+    var db = indexedDB.open(dbName, ver);
+    var obj, kid;
+    db.onupgradeneeded = function(e){//storstr.forEach(function(v){ e.currentTarget.result.createObjectStore(v, {keyPath:"id", autoIncrement: true}) });
+        var db = e.currentTarget.result
+        db.createObjectStore(storstr[DEF], {keyPath:"id", autoIncrement: false});
+        db.createObjectStore(storstr[OPT], {keyPath:"id", autoIncrement: true})
+            .createIndex('parent', 'parent', { unique: false });
+    }
+    db.onsuccess = function(){
+        var transaction = this.result.transaction(storstr, "readwrite"),
+            stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+        
+        function saveDB(node, parentId){
+            node[0].parent = parentId || 'root';
+            var opt2db = {}, def2db = {};
+            for(var k in node[0])
+                if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
+                else opt2db[k] = node[0][k];
+            
+            stor[OPT].add( opt2db ).onsuccess = function(e){
+                def2db.id = opt2db.id = node[0].id = e.target.result;
+                stor[DEF].add( def2db );
+                for(var n = node.length; --n ;) saveDB(node[n], node[0].id);
+            };
+        }
+        
+        //saveDB(json); onJsonLoaded(json); //импортировать json в базу данных и запустить mindmap
+        loadDB();
+        
+        function loadDB(){
+            obj = [];
+            stor[OPT].openCursor().onsuccess = function(e) {
+                var cur = e.target.result;
+                if (cur) {
+                    obj[cur.value.id] = [cur.value];
+                    cur.continue();
+                } else {
+                    stor[DEF].openCursor().onsuccess = function(e) {
+                        var cur = e.target.result;
+                        if (!cur) return done();
+                        var id = cur.value.id;
+                        delete cur.value.id;
+                        obj[id][0].default = cur.value;
+                        cur.continue();
+                    };
+                }
+            };
+            function done(){
+                var root;
+                obj.forEach(function(v, i){
+                    if( v[0].parent == 'root' ) return root = i;
+                    obj[v[0].parent].push(v);
+                })
+                
+                console.log('root', root);
+                console.log('obj', obj);
+                onJsonLoaded(obj[root]); //TODO: async auto detect modification api
+            }
+        };
+    };
+    return {
+        add : function(node, parent){
+            var opt2db = {}, def2db = {};
+            for(var k in node[0])
+                if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
+                else if (k == 'parent' && node[0].parent[0]) opt2db.parent = node[0].parent[0].id;
+                else if (k != 'id') opt2db[k] = node[0][k];
+            if(parent) opt2db.parent = parent[0].id;
+            
+            indexedDB.open(dbName, ver).onsuccess = function(){
+                var transaction = this.result.transaction(storstr, "readwrite"),
+                    stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+                stor[OPT].add( opt2db ).onsuccess = function(e){
+                    node[0].id = e.target.result;
+                    def2db.id = node[0].id;
+                    stor[DEF].add( def2db );
+                }
+            }
+        },
+        del : function(node){
+            var id = node[0].id;
+            console.log('IDDB.DEL',node);
+            indexedDB.open(dbName, ver).onsuccess = function(){
+                var transaction = this.result.transaction(storstr, "readwrite"),
+                    stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+                (function delKid(id){
+                    stor[OPT].index("parent").openCursor(IDBKeyRange.only(id)).onsuccess = function(e) {
+                        var cur = e.target.result;
+                        if(!cur) return;
+                        delKid(cur.primaryKey);
+                        stor[OPT].delete(cur.primaryKey);
+                        stor[DEF].delete(cur.primaryKey);
+                        cur.continue();
+                    }
+                })(id);
+                stor[OPT].delete(id);
+                stor[DEF].delete(id);
+            }
+        },
+        mov : function(node, parent){
+            var opt2db = {}, def2db = {id : node[0].id};
+            for(var k in node[0])
+                if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
+                else if (k == 'parent' && node[0].parent[0]) opt2db.parent = node[0].parent[0].id;
+                else opt2db[k] = node[0][k];
+
+            if(parent) opt2db.parent = parent[0].id;
+            console.log('IDDB.MOV','opt2db', opt2db, 'def2db', def2db);
+            
+            indexedDB.open(dbName, ver).onsuccess = function(){
+                var transaction = this.result.transaction(storstr, "readwrite"),
+                    stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+                stor[OPT].put( opt2db )
+                stor[DEF].put( def2db );
+            }
+        }
+    };
+})("test");</script>
+    <script>'use strict';
+var MindMap = function (map, ids, px, angle, x0, y0) {
     //TODO: опцилональное автоскрытие одиночной цепи
-    (function setParent(node, parent){
-        node[0].parent = parent;
-        console.log(node[0].cap, 'child of', parent&&parent[0].cap || 'none');
-        for(var n = node.length; --n;) setParent(node[n], node);
+    var lastId = 0;
+    console.log('map', map);
+    (function setParent(node, parent) {
+        node[0].parent = parent || false;
+        //if(!node[0].id) node[0].id = lastId++; //autoIncrementID
+        console.log(node[0].cap, 'child of', parent && parent[0].cap || 'none');
+        for (var n = node.length; --n;) setParent(node[n], node);
     })(map);
     
     var ctx = ids.canvas.getContext('2d');
@@ -97,17 +223,18 @@ var MindMap = function (map, ids, px, angle, x0, y0){
     angle = angle || Math.PI*2;
     x0 = x0 || ids.canvas.width / 2; y0 = y0 || ids.canvas.height /2
     ctx.translate(x0, y0);
-    
-    ids.node.onkeydown = function(e){
+    ids.node.onkeydown = function(e){ //изменение названия пункта
         if((e || window.event).keyCode^13)return;
         targets[0][0].cap = this.value;
         ids.box.style.display = 'none';
-        ctx.sel.set();
+        ctx.sel.one();
     }
-    ids.child.onkeydown = function(e){
+    ids.child.onkeydown = function(e){ //добавление потомка
         if((e||window.event).keyCode^13)return;
-        if(!this.value)return ctx.sel.set()||ctx.sel.opt();
-        targets[0].push([{cap:this.value,parent:targets[0]}]);
+        if(!this.value)return ctx.sel.one()||ctx.sel.opt(); //при пустом вводе отмена ввода
+        var node = [{cap:this.value, parent:targets[0]}] //создание пункта
+        iddb.add(node);
+        targets[0].push( node );
         this.value='';
     }
     
@@ -186,33 +313,36 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             ctx.draw(node[k], a+sector * (k-1), sector, radA, lim - 1);
     }
     
-    var targets = [];
+    var targets = [],
+        way = map;
     ctx.sel = {
+        /** открыть карту с уровня пункта */
+        way : function(node){},
+        /** открыть окно опций для переданного пункта */
         opt : function(node){
             if(!node){
                 if(ids.box.style.display !== 'none'){
                     ids.box.style.display = 'none';
-                    ctx.sel.set();
+                    ctx.sel.one();
                 }
                 return
             }
-            ctx.sel.set(node);
+            ctx.sel.one(node);
             ids.child.select();
             ids.box.style.display = 'block';
             ids.node.value = node[0].cap || 'none';
             ids.child.focus();
         },
-        mov : function(node){
-            if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
-            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
-            for(var t; t = targets[targets.length-1];){
-                ctx.sel.del(t);
-                node && node.push(t);
-                t[0].parent = node;
-            }
+        
+        /** добавить пункт в карту */
+        add : function(node){
+            
         },
-        del : function(node){ //удаляет пункт
+        /** удалить пункт из карты */
+        del : function(node, notSync){ //удаляет пункт
             if(node === map)return; //нельзя удалить корневой пункт
+            if(!notSync) //толко если у пункта есть родитель, он наверняка не корневой, и его можно удалить из базы!
+                iddb.del(node) //удалить из базы
             var parent = node[0].parent,
                 idx = parent.indexOf(node);
             console.log('DELETE', node[0].cap + ' ' + idx, 'child of', parent && parent[0].cap || 'none');
@@ -220,19 +350,40 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             parent.splice(idx, 1);
             console.log(map);
         },
+        /** переместить выбранное в сообщенный пункт */
+        mov : function(node){
+            //TODO: remove iddb
+            if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
+            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
+            for(var t; t = targets[targets.length-1];){
+                ctx.sel.del(t, node);
+                if (node) {
+                    node.push(t);
+                    iddb.mov(t, node);
+                    t[0].parent = node; //защита пункта от удаления из базы (пункт без родителя считается корневым и не может быть удален)
+                }
+            }
+        },
+        
+        /** получить список выбранных на данный момент пунктов */
         get : function(){return targets},
-        set : function(node){ //ограничивает выбор только переданным пунктом или полностью снимает выбор если node не передан
+        /** выбор только переданного пункта или снятие всего выбора, не передан */
+        one : function(node){
             //console.log('before',targets); //DEBUG:
             for(var n = targets.length; n--;) ctx.sel.pop(targets[n]);
-            if(node) ctx.sel.add(node);
+            if(node) ctx.sel.set(node);
             //console.log('after',targets); //DEBUG:
         },
-        xor : function(node){
-            //console.log('before',targets); //DEBUG:
+        
+        /** добавить переданный пункт к выбранным */
+        set : function(node){ //добавляет пункт к выбранным
             if(!node)return;
-            if(node[0].mark) ctx.sel.pop(node); else ctx.sel.add(node);
-            //console.log('after',targets); //DEBUG:
+            if(node[0].mark) return; //if already keep return
+            node[0].mark = 1;
+            targets.push(node);
+            //ctx.draw(node); //TODO: out from API ?
         },
+        /** убрать переданный пункт из выбора */
         pop : function(node){ //убирает пункт из выбранных (если он выбран) //TODO: nodes[] support
             if(!node)return;
             if(!node[0].mark)return; //if already free return
@@ -241,12 +392,12 @@ var MindMap = function (map, ids, px, angle, x0, y0){
             if(!~idx)console.log('error drop target', idx, node, 'from', targets);//DEBUG: check targets work
             targets.splice(idx, 1);
         },
-        add : function(node){ //добавляет пункт к выбранным
+        /** инвертировать выбор на переданном пункте */
+        xor : function(node){
+            //console.log('before',targets); //DEBUG:
             if(!node)return;
-            if(node[0].mark) return; //if already keep return
-            node[0].mark = 1;
-            targets.push(node);
-            //ctx.draw(node); //TODO: out from API ?
+            if(node[0].mark) ctx.sel.pop(node); else ctx.sel.set(node);
+            //console.log('after',targets); //DEBUG:
         }
     }
     return ctx;
@@ -307,52 +458,61 @@ function Even3(item){
     <script>
         "use strict";
         //var size = Math.min(innerWidth, innerHeight); cnv.width = size; cnv.height = size;
-        cnv.width = innerWidth; cnv.height = innerHeight;
-        var mmap = MindMap(json, {canvas:cnv,box:document.getElementById('box'),node:document.getElementById('node'),child:document.getElementById('child')});
-        mmap.fillStyle = '#000'; mmap.strokeStyle = '#666';
-        var debugtime = (new Date()).getTime();
-        mmap.font = '24px sans-serif';
-        document.title = 'карта построена за '+ ((new Date()).getTime() - debugtime)+'ms';
-        go();
-        function go(){
-            mmap.clear();
-            mmap.draw();
-            window.requestAnimationFrame(go);
-            //setTimeout(go,500);
-            //json[0].a+=.003;
-        }
-        
-        Even3(document.getElementById('cnv'))(
-            [{mousemove: function(e,msg){
-                console.log('Hover');
-                var item = mmap.pick(msg.X - cnv.offsetLeft, msg.Y - cnv.offsetTop)
-                document.getElementById('statusbar').innerHTML = item ?
-                    '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
-                    '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
-            }}],
-            [{'mousedown|touchstart': function(e,msg){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.set(false);}}],
-                [{wait: function(e, msg){
-                    return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
-                }},
-                    [{'mousemove|touchmove': function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
-                    [{'mouseup|touchend': function(){console.log('DblDrop')}}]
-                ],
-                [{'mouseup|touchend': function(e){console.log('Click');}},
-                    [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
-                    [{'mousedown|touchstart': function(e,msg){console.log('DblDown');mmap.sel.add(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                        [{'mouseup|touchend': function(e, msg){console.log('DblClick');mmap.sel.opt(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop));}}],
-                        [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
-                            [{'mousemove|touchmove': function(e, msg){console.log('Drag'); return true;}}],
-                            [{'mouseup|touchend': function(e, msg){
-                                console.log('Drop'); mmap.sel.mov(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))
-                            }}]
+        function onJsonLoaded(json){
+            cnv.width = innerWidth; cnv.height = innerHeight;
+            var mmap = MindMap(json, {
+                canvas:cnv,box:document.getElementById('box'),node:document.getElementById('node'),child:document.getElementById('child')
+            });
+            mmap.font = '900 18px sans-serif';
+            mmap.fillStyle = '#000'; mmap.strokeStyle = '#666';
+            var debugtime = (new Date()).getTime();
+            document.title = 'карта построена за '+ ((new Date()).getTime() - debugtime)+'ms';
+            go();
+            function go(){
+                mmap.clear();
+                mmap.draw();
+                window.requestAnimationFrame(go);
+                //setTimeout(go,500);
+                //json[0].a+=.003;
+            }
+
+            document.getElementById('savemap').onclick = function(e){
+                e = e || window.event;
+
+            }
+
+            Even3(document.getElementById('cnv'))(
+                [{mousemove: function(e,msg){
+                    console.log('Hover');
+                    var item = mmap.pick(msg.X - cnv.offsetLeft, msg.Y - cnv.offsetTop)
+                    document.getElementById('statusbar').innerHTML = item ?
+                        '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
+                        '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
+                }}],
+                [{'mousedown|touchstart': function(e,msg){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
+                    [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.one(false);}}],
+                    [{wait: function(e, msg){
+                        return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
+                    }},
+                        [{'mousemove|touchmove': function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
+                        [{'mouseup|touchend': function(){console.log('DblDrop')}}]
+                    ],
+                    [{'mouseup|touchend': function(e){console.log('Click');}},
+                        [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
+                        [{'mousedown|touchstart': function(e,msg){console.log('DblDown');mmap.sel.set(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
+                            [{'mouseup|touchend': function(e, msg){console.log('DblClick');mmap.sel.opt(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop));}}],
+                            [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
+                                [{'mousemove|touchmove': function(e, msg){console.log('Drag'); return true;}}],
+                                [{'mouseup|touchend': function(e, msg){
+                                    console.log('Drop'); mmap.sel.mov(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))
+                                }}]
+                            ]
                         ]
                     ]
                 ]
-            ]
-        )
-        setInterval(document.getElementById('cnv').onwait, 50);
+            )
+            setInterval(document.getElementById('cnv').onwait, 50);
+        }
     </script>
 </body>
 </html>
