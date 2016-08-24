@@ -29,7 +29,6 @@
         <div id=box>
 			<div class=line><span class=prop>Дочернее имя:</span> <input class=val id=child type=text></input></div>
             <div class=line><span class=prop>Имя элемента:</span> <input class=val id=node type=text></input></div>
-            <div class=line><button id=savemap class=prop>Сохранить все</button></div>
         </div>
     </div>
     <canvas id=cnv></canvas>
@@ -57,12 +56,7 @@
                 //setTimeout(go,500);
                 //json[0].a+=.003;
             }
-
-            document.getElementById('savemap').onclick = function(e){
-                e = e || window.event;
-
-            }
-
+            
             Even3(document.getElementById('cnv'))(
                 [{mousemove: function(e,msg){
                     console.log('Hover');
