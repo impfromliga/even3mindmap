@@ -19,6 +19,7 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
     ids.node.onkeydown = function(e){ //изменение названия пункта
         if((e || window.event).keyCode^13)return;
         targets[0][0].cap = this.value;
+        iddb.mov(targets[0]);
         ids.box.style.display = 'none';
         ctx.sel.one();
     }
