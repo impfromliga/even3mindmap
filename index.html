@@ -84,22 +84,23 @@
     ]
 ]</script>
     <script>var iddb = (function(dbName, ver){
-    ver = ver || 7
+    ver = ver || 7;
     var OPT = 0, DEF = 1, storstr = ["opt", "def"];
     var indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
     var db = indexedDB.open(dbName, ver);
     var obj, kid;
     db.onupgradeneeded = function(e){//storstr.forEach(function(v){ e.currentTarget.result.createObjectStore(v, {keyPath:"id", autoIncrement: true}) });
         var db = e.currentTarget.result
-        db.createObjectStore(storstr[DEF], {keyPath:"id", autoIncrement: false});
-        db.createObjectStore(storstr[OPT], {keyPath:"id", autoIncrement: true})
-            .createIndex('parent', 'parent', { unique: false });
-    }
-    db.onsuccess = function(){
-        var transaction = this.result.transaction(storstr, "readwrite"),
-            stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+        var stor = [db.createObjectStore(storstr[OPT], {keyPath:"id", autoIncrement: true}),
+                    db.createObjectStore(storstr[DEF], {keyPath:"id", autoIncrement: false})];
+        stor[OPT].createIndex('parent', 'parent', { unique: false });
         
-        function saveDB(node, parentId){
+        stor[OPT].add({cap: 'root', parent: 'root'}).onsuccess = function(e){
+            stor[DEF].add({id : e.target.result});
+        }
+        //saveDB(json, stor); onJsonLoaded(json)
+    }
+    function saveDB(node, stor, parentId){
             node[0].parent = parentId || 'root';
             var opt2db = {}, def2db = {};
             for(var k in node[0])
@@ -112,8 +113,10 @@
                 for(var n = node.length; --n ;) saveDB(node[n], node[0].id);
             };
         }
-        
-        //saveDB(json); onJsonLoaded(json); //импортировать json в базу данных и запустить mindmap
+    db.onsuccess = function(){
+        var transaction = this.result.transaction(storstr, "readwrite"),
+            stor = storstr.map(function(v, i){ return transaction.objectStore(v) });
+        //saveDB(json, stor); onJsonLoaded(json); //импортировать json в базу данных и запустить mindmap
         loadDB();
         
         function loadDB(){
