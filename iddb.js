@@ -109,7 +109,7 @@ var iddb = (function(dbName, ver){
             for(var k in node[0])
                 if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
                 else if (k == 'parent' && node[0].parent[0]) opt2db.parent = node[0].parent[0].id;
-                else opt2db[k] = node[0][k];
+                else if (k != 'mark') opt2db[k] = node[0][k];
 
             if(parent) opt2db.parent = parent[0].id;
             console.log('IDDB.MOV','opt2db', opt2db, 'def2db', def2db);
