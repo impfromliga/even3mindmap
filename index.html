@@ -84,6 +84,7 @@
 ]</script>
     <script>var iddb = (function(dbName, ver){
     ver = ver || 7;
+    var name = 'root';
     var OPT = 0, DEF = 1, storstr = ["opt", "def"];
     var indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
     var db = indexedDB.open(dbName, ver);
@@ -94,13 +95,13 @@
                     db.createObjectStore(storstr[DEF], {keyPath:"id", autoIncrement: false})];
         stor[OPT].createIndex('parent', 'parent', { unique: false });
         
-        stor[OPT].add({cap: 'root', parent: 'root'}).onsuccess = function(e){
+        stor[OPT].add({cap: name, parent: name}).onsuccess = function(e){
             stor[DEF].add({id : e.target.result});
         }
         //saveDB(json, stor); onJsonLoaded(json)
     }
     function saveDB(node, stor, parentId){
-            node[0].parent = parentId || 'root';
+            node[0].parent = parentId || name;
             var opt2db = {}, def2db = {};
             for(var k in node[0])
                 if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
@@ -139,11 +140,11 @@
             function done(){
                 var root;
                 obj.forEach(function(v, i){
-                    if( v[0].parent == 'root' ) return root = i;
+                    if( v[0].parent == name ) return root = i;
                     obj[v[0].parent].push(v);
                 })
                 
-                console.log('root', root);
+                console.log(name, root);
                 console.log('obj', obj);
                 onJsonLoaded(obj[root]); //TODO: async auto detect modification api
             }
@@ -193,6 +194,7 @@
             for(var k in node[0])
                 if (k == 'default') for(var j in node[0].default) def2db[j] = node[0].default[j];
                 else if (k == 'parent' && node[0].parent[0]) opt2db.parent = node[0].parent[0].id;
+                else if (k == 'parent' && node[0][k] === false) opt2db.parent = name; //fix root map name (hothix) 
                 else if (k != 'mark') opt2db[k] = node[0][k];
 
             if(parent) opt2db.parent = parent[0].id;
