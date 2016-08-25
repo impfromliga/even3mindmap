@@ -294,7 +294,8 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
         ctx.save();
         if(node[0].mark) for(var m in style.select) ctx[m] = style.select[m]; //if selected node set style
         else for(var m in style.default) ctx[m] = style.default[m];
-        if(da === Math.PI*2) radA = 20; //СВЕРТКА пути! //TODO: опциональность
+        if(node === map) radA = 20; //СВЕРТКА пути! //TODO: опциональность
+        //if(da === Math.PI*2) radA = 20; //СВЕРТКА пути! //TODO: опциональность
         ctx.beginPath();
         if(r)ctx.arc(0, 0, r , a, a+da);
         ctx.arc(0, 0, radA - margin, a+da, a, true);
@@ -303,12 +304,12 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
         ctx.stroke();
         ctx.restore();
 
-        if(da !== Math.PI*2){ //СВЕРТКА пути! //TODO: опциональность
+        //if(da !== Math.PI*2){ //СВЕРТКА пути! //TODO: опциональность
             ctx.rotate(a+da/2); //TODO: one transform // +da/2 cos vertical centred
             ctx.translate(radA - w/2 - margin, 0);
             if(Math.cos(a+da/2) < 0) ctx.scale(-1,-1);
             ctx.fillText(name, 0, 0);
-        }
+        //}
         ctx.restore();
         
         if(lim <= 0)return;
