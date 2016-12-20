@@ -322,6 +322,7 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
     var targets = [],
         way = map;
     ctx.sel = {
+        get css(){return style.select}, //получить стиль выделенного пункта
         /** открыть карту с уровня пункта */
         way : function(node){},
         /** открыть окно опций для переданного пункта */
@@ -409,57 +410,66 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
     return ctx;
 }</script>
     <script>"use strict";
-//TODO: reject by Object.defineProperty() events external reset
+//TYR: reject by Object.defineProperty() events external reset
 //TODO: циклические ссылки в цепях
-//TODO: multi-item Even3 optimization
+//TRY: multi-item Even3 optimization //!!! see event.target!
+//TODO: extension event types
 //FIX: alias from touch to mouse - reject multitouch
-function Even3(item){
-    item.ontouchstart = item.ontouchmove = item.ontouchend =
-    item.onmousemove = item.onmouseup = item.onmousedown = item.onwait = function(e){
-        e = e || window.event || {}; msg.even3 = msg.even3 || e;
-        msg.X = e.pageX || e.changedTouches && e.changedTouches[0].pageX;
-        msg.Y = e.pageY || e.changedTouches && e.changedTouches[0].pageY;
+function Even3(ext){
+    var tree = [{root:function(){throw Error("impossible mistake: Can't run root node")}}],
+        self, state = tree, sub = {};
+    self = function(e){
+        e = e || window.event || {};
         e.preventDefault && e.preventDefault(); //для отмены действий поумолчанию
         e.returnValue = false;
-        msg.now = e.timeStamp || (window.performance && window.performance.now()); msg.time = msg.time || msg.now; //дублируем метку времени
-        msg.dT = (msg.now - msg.even3.timeStamp) || 0;
-        msg.dX = (msg.X - (msg.even3.pageX || msg.even3.changedTouches && msg.even3.changedTouches[0].pageX)) || 0; msg.dx = (msg.X - msg.x) || 0;
-        msg.dY = (msg.Y - (msg.even3.pageY || msg.even3.changedTouches && msg.even3.changedTouches[0].pageY)) || 0; msg.dy = (msg.Y - msg.y) || 0;
+        for(var n in ext)
+            if((new RegExp(n)).test(e.type))
+                return route(ext[n](e) || {});
+        route(e || {});
+    }
+    var route = function(e){
+        sub.event = sub.event || e;
+        sub.X = e.pageX; sub.Y = e.pageY;
+        sub.now = e.timeStamp || (window.performance && window.performance.now());
+        sub.time = sub.time || sub.now;
+        sub.dT = (sub.now - sub.event.timeStamp) || 0;
+        sub.dx = (sub.X - sub.x) || 0;              sub.dy = (sub.Y - sub.y) || 0;
+        sub.dX = (sub.X - sub.event.pageX) || 0;    sub.dY = (sub.Y - sub.event.pageY) || 0;
         while(true){
-            msg.dt = (msg.now - msg.time) || 0;
+            sub.dt = (sub.now - sub.time) || 0;
             for(var buf = [], key, obj, n = 1; obj = state[n] && state[n][0]; n++)
                 if('wait' == (key = Object.keys(obj)[0])){
-                    var newmsg = obj[key](e, msg);
-                    if(newmsg === true) continue;
-                    if(newmsg === false || newmsg === undefined) {state = item.even3; break;} //событие обрывает цепочку
-                    if(newmsg >= 0) continue;
-                    buf.push({delay: newmsg - Math.random(), state: state[n]});
+                    var newsub = obj[key](e, sub);
+                    if(newsub === true) continue;
+                    if(newsub === false || newsub === undefined) {state = tree; break;} //событие обрывает цепочку
+                    if(newsub >= 0) continue;
+                    buf.push({delay: newsub - Math.random(), state: state[n]});
                 }
             if(!buf.length) break;
             var erlyest = buf.reduce(function(a, b){return (a.delay < b.delay) ? a : b});
             state = erlyest.state;
-            msg.time += erlyest.delay; //|| msg.now; 
-            if(state.length <= 1) state = item.even3; //тупиковая цепочка, возвращаем состояние на корень Even3
+            sub.time += erlyest.delay; //|| sub.now; 
+            if(state.length <= 1) state = tree; //тупиковая цепочка, возвращаем состояние на корень Even3
         }
-        if(state.length <= 1) state = item.even3; //тупиковая цепочка, возвращаем состояние на корень Even3
-        
+        if(state.length <= 1) state = tree; //тупиковая цепочка, возвращаем состояние на корень Even3
         for(var key, obj, n = 1; obj = state[n] && state[n][0]; n++){
             var regex = new RegExp(key = Object.keys(obj)[0]);
             if(regex.test(e.type)){
-                var newmsg = obj[key](e, msg);
-                msg.time = msg.now; //дублируем метку времени события
-                msg.x = msg.X; msg.y = msg.Y;
-                if(newmsg === true) continue; //событие ожидает других условий
-                if(newmsg === false) { state = item.even3; return false}; //событие обрывает цепочку
-                msg.even3 = e; //сохраняем информацию о выполненном событии
-                //TODO: событие может вернуть объект newmsg... сделаем управляемый переход для граффовой структуры цепочек?
+                var newsub = obj[key](e, sub);
+                sub.time = sub.now; //дублируем метку времени события
+                sub.x = sub.X; sub.y = sub.Y;
+                if(newsub === true) continue; //событие ожидает других условий
+                if(newsub === false) { state = tree; return false}; //событие обрывает цепочку
+                sub.event = e; //сохраняем информацию о выполненном событии
+                //TODO: событие может вернуть объект newsub... сделаем управляемый переход для граффовой структуры цепочек?
                 state = state[n];
                 return false;
             }
         }
     }
-    var msg = {}, state = item.even3 = [{root:function(){throw Error("impossible mistake: Can't run root node")}}];
-    return function(){ for(var n = 0; n < arguments.length; n++) item.even3.push(arguments[n]); };
+    self.set = function(){for(var n = 0; n < arguments.length; n++) tree.push(arguments[n]);return self};
+    self.add = function(eitem){for(var key in eitem)key.split('|').forEach((e)=>{eitem[key]['on'+e]=self});return self};
+    return self;
 }</script>
     <script>
         "use strict";
@@ -482,37 +492,41 @@ function Even3(item){
                 //json[0].a+=.003;
             }
             
-            Even3(document.getElementById('cnv'))(
-                [{mousemove: function(e,msg){
+            var item = document.getElementById('cnv');
+            Even3({'touchstart|touchmove|touchend':(e)=>(e.changedTouches && e.touches.length == (e.type != 'touchend') && e.changedTouches[0])})
+            .add({'mouseup|mousemove|mousedown|touchstart|touchmove|touchend|wait':item})
+            .set(
+                [{'mousemove': function(e,sub){
                     console.log('Hover');
-                    var item = mmap.pick(msg.X - cnv.offsetLeft, msg.Y - cnv.offsetTop)
+                    var item = mmap.pick(sub.X - cnv.offsetLeft, sub.Y - cnv.offsetTop)
                     document.getElementById('statusbar').innerHTML = item ?
                         '<b><big>"' + item[0].cap + '":</big></b> ' + (item[0].alt || 'no tip') :
                         '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
                 }}],
-                [{'mousedown|touchstart': function(e,msg){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                    [{wait: function(e, msg){console.log('hold...', msg.dT); if(msg.dT < 700) return true; console.log('Hold'); mmap.sel.one(false);}}],
-                    [{wait: function(e, msg){
-                        return(Math.hypot(msg.dX, msg.dY) < 8||mmap.sel.xor(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop)) )-1;
-                    }},
-                        [{'mousemove|touchmove': function(e, msg){console.log('DblDrag'); mmap.scroll(msg.dx, msg.dy); return true;}}],
+                [{'mousedown|touchstart': function(e,sub){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop))}},
+                    [{'wait': function(e, sub){console.log('Hold...', sub.dT);if(sub.dT < 700) return true; mmap.sel.css.strokeStyle='#fa6';return-1;}},
+                        [{'mousemove|touchmove': function(e, sub){console.log('Drag'); return true;}}],
+                        [{'mouseup|touchend': function(e, sub){
+                            console.log('Drop'); mmap.sel.mov(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop));mmap.sel.css.strokeStyle='#6af';}}
+                        ]
+                    ],
+                    [{wait: function(e, sub){
+                        return(Math.hypot(sub.dX, sub.dY) < 8||mmap.sel.xor(mmap.pick(sub.x -cnv.offsetLeft, sub.y -cnv.offsetTop)) )-1;}},
+                        [{'mousemove|touchmove': function(e, sub){console.log('DblDrag'); mmap.scroll(sub.dx, sub.dy); return true;}}],
                         [{'mouseup|touchend': function(){console.log('DblDrop')}}]
                     ],
                     [{'mouseup|touchend': function(e){console.log('Click');}},
-                        [{wait: function(e, msg){return ((Math.hypot(msg.dX, msg.dY) < 8) && (msg.dT < 300))||console.log('Dbl break by time/drag');}}],
-                        [{'mousedown|touchstart': function(e,msg){console.log('DblDown');mmap.sel.set(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))}},
-                            [{'mouseup|touchend': function(e, msg){console.log('DblClick');mmap.sel.opt(mmap.pick(msg.x -cnv.offsetLeft, msg.y -cnv.offsetTop));}}],
-                            [{wait: function(e, msg){return -(Math.hypot(msg.dX, msg.dY) > 8||msg.dT > 200)}},
-                                [{'mousemove|touchmove': function(e, msg){console.log('Drag'); return true;}}],
-                                [{'mouseup|touchend': function(e, msg){
-                                    console.log('Drop'); mmap.sel.mov(mmap.pick(msg.X -cnv.offsetLeft, msg.Y -cnv.offsetTop))
-                                }}]
+                        [{'wait': function(e, sub){return ((Math.hypot(sub.dX, sub.dY) < 8) && (sub.dT < 300))||console.log('Dbl break by time/drag');}}],
+                        [{'mousedown|touchstart': function(e,sub){console.log('DblDown');mmap.sel.set(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop))}},
+                            [{'mouseup|touchend': function(e, sub){console.log('DblClick');mmap.sel.opt(mmap.pick(sub.x -cnv.offsetLeft, sub.y -cnv.offsetTop));}}],
+                            [{'wait': function(e, sub){
+                                console.log('DblHold...', sub.dT); if(sub.dT < 200) return true; console.log('DblHold'); mmap.sel.one(false);}}
                             ]
                         ]
                     ]
                 ]
-            )
-            setInterval(document.getElementById('cnv').onwait, 50);
+            );
+            setInterval(item.onwait, 50);
         }
     </script>
 </body>
