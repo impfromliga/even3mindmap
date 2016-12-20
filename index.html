@@ -417,18 +417,23 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
 //FIX: alias from touch to mouse - reject multitouch
 function Even3(ext){
     var tree = [{root:function(){throw Error("impossible mistake: Can't run root node")}}],
-        self, state = tree, sub = {};
+        self, state = tree, sub = {type:'wait'};
     self = function(e){
         e = e || window.event || {};
         e.preventDefault && e.preventDefault(); //для отмены действий поумолчанию
         e.returnValue = false;
         for(var n in ext)
-            if((new RegExp(n)).test(e.type))
-                return route(ext[n](e) || {});
-        route(e || {});
+            if((new RegExp(n)).test(e.type)){
+                var evt = ext[n](e);
+                //console.log('touch evt convert to ->',evt.type);
+                route(evt||{type:'wait'});
+                return;
+            }
+        route(e || {type:'wait'});
     }
     var route = function(e){
         sub.event = sub.event || e;
+        //sub.event.timeStamp = sub.event.timeStamp || (window.performance && window.performance.now());
         sub.X = e.pageX; sub.Y = e.pageY;
         sub.now = e.timeStamp || (window.performance && window.performance.now());
         sub.time = sub.time || sub.now;
@@ -468,7 +473,7 @@ function Even3(ext){
         }
     }
     self.set = function(){for(var n = 0; n < arguments.length; n++) tree.push(arguments[n]);return self};
-    self.add = function(eitem){for(var key in eitem)key.split('|').forEach((e)=>{eitem[key]['on'+e]=self});return self};
+    self.add = function(eitem){for(var key in eitem)key.split('|').forEach((e)=>{eitem[key].addEventListener(e, self)});return self};
     return self;
 }</script>
     <script>
@@ -493,8 +498,12 @@ function Even3(ext){
             }
             
             var item = document.getElementById('cnv');
-            Even3({'touchstart|touchmove|touchend':(e)=>(e.changedTouches && e.touches.length == (e.type != 'touchend') && e.changedTouches[0])})
-            .add({'mouseup|mousemove|mousedown|touchstart|touchmove|touchend|wait':item})
+            
+            setInterval(Even3({'touchstart|touchmove|touchend':(e)=>{
+                var t = e.changedTouches&&(e.touches.length==(e.type!='touchend'))&&e.changedTouches[0];
+                t.type = e.type; t.timeStamp = e.timeStamp; return t;
+            }})
+            .add({'mouseup|mousemove|mousedown|touchstart|touchmove|touchend':item})
             .set(
                 [{'mousemove': function(e,sub){
                     console.log('Hover');
@@ -505,15 +514,15 @@ function Even3(ext){
                 }}],
                 [{'mousedown|touchstart': function(e,sub){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop))}},
                     [{'wait': function(e, sub){console.log('Hold...', sub.dT);if(sub.dT < 700) return true; mmap.sel.css.strokeStyle='#fa6';return-1;}},
-                        [{'mousemove|touchmove': function(e, sub){console.log('Drag'); return true;}}],
+                        [{'mousemove|touchmove': function(e, sub){console.log('H-Drag'); return true;}}],
                         [{'mouseup|touchend': function(e, sub){
-                            console.log('Drop'); mmap.sel.mov(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop));mmap.sel.css.strokeStyle='#6af';}}
+                            console.log('H-Drop'); mmap.sel.mov(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop));mmap.sel.css.strokeStyle='#6af';}}
                         ]
                     ],
                     [{wait: function(e, sub){
                         return(Math.hypot(sub.dX, sub.dY) < 8||mmap.sel.xor(mmap.pick(sub.x -cnv.offsetLeft, sub.y -cnv.offsetTop)) )-1;}},
-                        [{'mousemove|touchmove': function(e, sub){console.log('DblDrag'); mmap.scroll(sub.dx, sub.dy); return true;}}],
-                        [{'mouseup|touchend': function(){console.log('DblDrop')}}]
+                        [{'mousemove|touchmove': function(e, sub){console.log('Drag'); mmap.scroll(sub.dx, sub.dy); return true;}}],
+                        [{'mouseup|touchend': function(){console.log('Drop')}}]
                     ],
                     [{'mouseup|touchend': function(e){console.log('Click');}},
                         [{'wait': function(e, sub){return ((Math.hypot(sub.dX, sub.dY) < 8) && (sub.dT < 300))||console.log('Dbl break by time/drag');}}],
@@ -525,8 +534,7 @@ function Even3(ext){
                         ]
                     ]
                 ]
-            );
-            setInterval(item.onwait, 50);
+            ), 50);
         }
     </script>
 </body>
