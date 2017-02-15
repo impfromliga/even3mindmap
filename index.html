@@ -32,56 +32,7 @@
         </div>
     </div>
     <canvas id=cnv></canvas>
-    <script>var json =
-[{"cap": "самоуправление", "alt": "для мозговых штурмов онлайн предлагается использовать данную карту разума, функционал требует обсуждения"},
-    [{"cap": "возможности"},
-        [{"cap": "анимация"},
-            [{"cap": "входы/выходы", "alt": "переходы по уровням анимируются плавным сжатием/растяжением сектора"}],
-            [{"cap": "в горизонталь", "alt": "выбор пункта крутит карту так, чтобы последний располагался горизонтально"}],
-        ],
-        [{"cap": "навигация"},
-            [{"cap": "скроллинг карты?", "alt": "происходит посредствам свайпов (нужен? или заменить входом в пункты)"}],
-            [{"cap": "вход в пункты", "alt": "двойное нажатие на пункт"}],
-            [{"cap": "вверх по корню", "alt": "двойное нажатие на корневой элемент производит выход на уровень вверх"}]
-        ],
-        [{"cap": "изменение"},
-            [{"cap": "добавление", "alt": "реализовано через изменение родителя (требует добавления интерактивного корневого элемента)"}],
-            [{"cap": "правка", "alt": "долгое нажатие на пункте"}],
-            [{"cap": "удаление", "alt": "реализуется через изменение пункта"}]
-        ],
-        [{"cap": "сортировка"},
-            [{"cap": "выбор", "alt": "краткое однократное нажатие на пункт (возможен множественный выбор)"}],
-            [{"cap": "перемещение", "alt": ""}]
-        ]
-    ],
-    [{"cap": "mouseDn"},
-        [{"cap": "mouseUp"},
-            [{"cap": "mouseDn"},
-                [{"cap": "mouseUp", "alt": "вход в пункт - двойной клик без задержек"}],
-                [{"cap": "mouseMov", "alt": "перемещение карты - двойной клик с удержанием второго клика + перемещение (как перемещение на тайчпаде)"}]
-            ],
-            [{"cap": "wait", "alt": "выбор пункта - одиночный короткий клик (с контрольной ожидающей паузой, чтобы отличить от возможного двойного)"}]
-        ],
-        [{"cap": "mouseMov", "alt": "перемещение выбранного - простое перетаскивание (смещение сразу без задержек после нажатия)"}],
-        [{"cap": "wait", "alt": "редактирование пункта - долгое нажатие"}]
-    ],
-    [{"cap": "API"},
-        [{"cap": "Mmap(canvas, json)", default:{fillStyle:'#020'}}],
-        [{"cap": ".draw(node)", "alt": "нарисует объект node (с обновлением потомков если необходимо)", default:{fillStyle:'#020'}}],
-        [{"cap": ".pick(x,y)", "alt": "вернет объект в точке (x,y)", default:{fillStyle:'#020'}}],
-        [{"cap": ".sel()", "alt": "вернет массив выбранных объектов", default:{fillStyle:'#020'}}],
-        [{"cap": ".sel([nodes])", "alt": "заменит выбор переданными объектами", default:{fillStyle:'#020'}}],
-        [{"cap": ".sel.keep([nodes])", "alt": "добавит выбор на переданные объекты", default:{fillStyle:'#666'}}],
-        [{"cap": ".sel.free([nodes])", "alt": "снимет выбор с переданных объектов", default:{fillStyle:'#666'}}],
-        [{"cap": ".sel.inv([nodes])", "alt": "инвертирует выбор на переданных объектах", default:{fillStyle:'#966'}}],
-        [{"cap": ".del([nodes])", "alt": "удаление выделенных элементов"}],
-        [{"cap": ".add([nodes])", "alt": "добавление нового элемента в выбранный"}],
-        [{"cap": ".style({...})", "alt": "стили рисовки элементов канвы", default:{fillStyle:'#202000'}},
-            [{"cap": "default:{fillstyle: '#999'}", "alt": "стили поумолчанию", default:{fillStyle:'#020'}}],
-            [{"cap": "select: {fillstyle: '#fff'}", "alt": "стиль выбраного элемента", default:{fillStyle:'#020'}}]
-        ]
-    ]
-]</script>
+    <!--script src='mmap.json'></script-->
     <script>var iddb = (function(dbName, ver){
     ver = ver || 7;
     var name = 'root';
@@ -304,6 +255,7 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        //ctx.rotate(a); ctx.strokeRect(radA - margin - 9,3,6,6); //TODO: sector sort button?
         ctx.restore();
 
         //if(da !== Math.PI*2){ //СВЕРТКА пути! //TODO: опциональность
@@ -318,7 +270,6 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
         for(var k = 1; k < node.length; k++)
             ctx.draw(node[k], a+sector * (k-1), sector, radA, lim - 1);
     }
-    
     var targets = [],
         way = map;
     ctx.sel = {
@@ -346,22 +297,58 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
             
         },
         /** удалить пункт из карты */
-        del : function(node, notSync){ //удаляет пункт
+        del : function(node,dbKeep){ //удаляет пункт
             if(node === map)return; //нельзя удалить корневой пункт
-            if(!notSync) //толко если у пункта есть родитель, он наверняка не корневой, и его можно удалить из базы!
-                iddb.del(node) //удалить из базы
+            if(!dbKeep) iddb.del(node) //удалить из базы
             var parent = node[0].parent,
                 idx = parent.indexOf(node);
             console.log('DELETE', node[0].cap + ' ' + idx, 'child of', parent && parent[0].cap || 'none');
             ctx.sel.pop(node);
             parent.splice(idx, 1);
-            console.log(map);
+            //console.log(map);
+        },
+        kin : function(node){
+            return !node||(typeof node[0].parent != 'object')? []: ctx.sel.kin(node[0].parent).concat([node]);
         },
         /** переместить выбранное в сообщенный пункт */
-        mov : function(node){
-            //TODO: remove iddb
+        mov : function(node,force){
+            //  исключить node и корень из target
             if(~targets.indexOf(map)) ctx.sel.pop(map); //перетаскивание корня! //TODO: можно перегрузить на выход вверх
-            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить
+            //if(node===undefined)
+            if(~targets.indexOf(node)) ctx.sel.pop(node); //перетаскивание на себя! //TODO: можно перегрузить (продолжить режим перемещения)
+            
+            console.log('kin(node) = ',ctx.sel.kin(node).reduce( function(p,c){return p+c[0].cap+'/'}, '/' ) );
+            
+            //  если хоть один из target является родителем хоть одного другого или node
+            console.log('can move items, by kins filtred:',
+                targets.filter(function(T){
+                    var nKins = ctx.sel.kin(node); //вседрево родителей node и сам node
+                    var tKins = ctx.sel.kin(T);
+                    return nKins.some(function(n){
+                        n[0].parent==T&&console.log(n[0].cap,T[0].cap);
+                        return n[0].parent==T;
+                    }) || targets.some(function(b){
+                        return tKins.some(function(t){
+                            t[0].parent==b&&console.log(t[0].cap,b[0].cap);
+                            return t[0].parent==b});
+                    })
+                }).map(function(v){ctx.sel.pop(v); return v[0].cap})
+            );
+            //return;
+            //      открыть окно подробностей
+            //  иначе
+            //      переместить сразу
+            
+            //force - true для выполнения без проверок
+            //TODO: remove iddb
+            //if(!node); //перетаскивание в пустоту (можно перегрузить для корня)
+            /*
+            if(!force){
+                var kins = ctx.sel.fit(node); 
+                if(kins>1) return 'alert'//ids.msg.style.display = 'block';
+                if(kins==false) node[0].parent = targets[0][0].parent;
+                if(kins>1) node[0].parent = targets[0][0].parent;
+            }*/
             for(var t; t = targets[targets.length-1];){
                 ctx.sel.del(t, node);
                 if (node) {
@@ -374,7 +361,7 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
         
         /** получить список выбранных на данный момент пунктов */
         get : function(){return targets},
-        /** выбор только переданного пункта или снятие всего выбора, не передан */
+        /** выбор только переданного пункта или снятие всего выбора, если не передан */
         one : function(node){
             //console.log('before',targets); //DEBUG:
             for(var n = targets.length; n--;) ctx.sel.pop(targets[n]);
@@ -410,7 +397,7 @@ var MindMap = function (map, ids, px, angle, x0, y0) {
     return ctx;
 }</script>
     <script>"use strict";
-//TYR: reject by Object.defineProperty() events external reset
+//TRY: reject by Object.defineProperty() events external reset
 //TODO: циклические ссылки в цепях
 //TRY: multi-item Even3 optimization //!!! see event.target!
 //TODO: extension event types
@@ -513,10 +500,10 @@ function Even3(ext){
                         '<small>наведите мышь на пункт, что бы просмотреть его описание</small>';
                 }}],
                 [{'mousedown|touchstart': function(e,sub){console.log('Down');mmap.sel.opt(); mmap.sel.xor(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop))}},
-                    [{'wait': function(e, sub){console.log('Hold...', sub.dT);if(sub.dT < 700) return true; mmap.sel.css.strokeStyle='#fa6';return-1;}},
+                    [{'wait': function(e, sub){console.log('Hold...', sub.dT);if(sub.dT < 700) return true; mmap.sel.set(mmap.pick(sub.x -cnv.offsetLeft, sub.y -cnv.offsetTop)); mmap.sel.css.strokeStyle='#fa6';return-1;}},
                         [{'mousemove|touchmove': function(e, sub){console.log('H-Drag'); return true;}}],
                         [{'mouseup|touchend': function(e, sub){
-                            console.log('H-Drop'); mmap.sel.mov(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop));mmap.sel.css.strokeStyle='#6af';}}
+                            console.log('H-Drop'); mmap.sel.mov(mmap.pick(sub.X -cnv.offsetLeft, sub.Y -cnv.offsetTop));mmap.sel.css.strokeStyle='#6af';return false;}}
                         ]
                     ],
                     [{wait: function(e, sub){
